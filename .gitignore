@@ -1,0 +1,4 @@
+SAM-6D/Data/Example/outputs
+*.pyc
+*.pt
+*.pth
