@@ -26,3 +26,5 @@ docker run -it --rm \
   -e QT_X11_NO_MITSHM=1 \
   -w /workspace \
   sam-6d:cu128-sm120 bash
+
+  #The Dockerfile is the reproducible source; rebuild with docker build -f Dockerfile.cu128 -t sam-6d:cu128-sm120 <empty-dir> (needs the staged pointnet2_src/.
