@@ -1,0 +1,61 @@
+# SAM-6D on Blackwell (RTX 5070 Ti / sm_120)
+#
+# The original image (lihualiu/sam-6d:1.0) is Ubuntu 18.04 / glibc 2.27 with
+# torch 2.0.0+cu117 — kernels only up to sm_86, and too old a glibc for the
+# cu128 wheels (manylinux_2_28). This image rebases the SAME conda env onto a
+# CUDA 12.8 / Ubuntu 22.04 (glibc 2.35) base and swaps PyTorch to a cu128 build
+# that ships sm_120 kernels. glibc forward-compat lets the existing conda
+# binaries run unchanged; only PyTorch is replaced.
+#
+# Build (from an empty context — nothing local is copied in):
+#   docker build -f Dockerfile.cu128 -t sam-6d:cu128-sm120 /path/to/empty/dir
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime/system libs that the conda Python deps (opencv, open3d, blenderproc,
+# Qt/X11 viewers) dynamically link against; the -devel base already provides
+# nvcc 12.8 + g++ for the pointnet2 rebuild.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libxi6 \
+        libgomp1 libusb-1.0-0 ninja-build git wget ca-certificates \
+        libegl1 libgles2 libopengl0 libglvnd0 libegl-mesa0 \
+        libgl1-mesa-dri libosmesa6 libglx-mesa0 libglu1-mesa \
+    && rm -rf /var/lib/apt/lists/*
+
+# Reuse the entire 12G dependency stack from the original image as-is.
+COPY --from=lihualiu/sam-6d:1.0 /opt/conda /opt/conda
+
+# blenderproc's Blender 3.3.1 lives outside /opt/conda; bring it so the render
+# step finds it locally instead of re-downloading (the old URL now 403s).
+COPY --from=lihualiu/sam-6d:1.0 /root/blender /root/blender
+
+# Make the sam6d env the default interpreter so demo.sh's bare `python` /
+# `blenderproc` resolve correctly without an explicit `conda activate`.
+ENV PATH=/opt/conda/envs/sam6d/bin:/opt/conda/bin:$PATH
+ENV CUDA_HOME=/usr/local/cuda
+
+# Swap PyTorch to cu128 (sm_120 kernels) and drop xformers 0.0.18 (built for
+# torch 2.0; all its imports in SAM-6D are guarded try/except ImportError).
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 \
+        torch==2.7.1 torchvision==0.22.1 \
+ && pip uninstall -y xformers || true
+
+# Sanity: torch imports and is the expected cu128 build. The sm_120 kernel-arch
+# check (torch.cuda.get_arch_list()) needs a visible GPU, which `docker build`
+# lacks — that is verified at runtime instead (see post-build steps).
+RUN python -c "import torch, torchvision; print('torch', torch.__version__, 'tv', torchvision.__version__); assert torch.version.cuda.startswith('12.8'), torch.version.cuda"
+
+# Rebuild the pointnet2 CUDA extension for sm_120. The image ships a stale,
+# non-editable egg compiled for cu117/sm_86; reinstalling from source with an
+# explicit arch list emits sm_120 (+PTX) kernels. nvcc needs no GPU to compile,
+# so this works inside `docker build`.
+ENV TORCH_CUDA_ARCH_LIST="12.0+PTX"
+COPY pointnet2_src /tmp/pointnet2_src
+RUN cd /tmp/pointnet2_src \
+ && pip install --no-build-isolation --force-reinstall . \
+ && python -c "import torch, pointnet2._ext as e; print('pointnet2._ext rebuilt OK:', e.__file__)" \
+ && rm -rf /tmp/pointnet2_src
+
+WORKDIR /workspace
+CMD ["bash"]

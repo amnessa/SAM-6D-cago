@@ -25,4 +25,4 @@ docker run -it --rm \
   -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute,display \
   -e QT_X11_NO_MITSHM=1 \
   -w /workspace \
-  lihualiu/sam-6d:1.0 bash
+  sam-6d:cu128-sm120 bash
