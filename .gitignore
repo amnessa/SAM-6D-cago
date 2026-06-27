@@ -2,3 +2,4 @@ SAM-6D/Data/Example/outputs
 *.pyc
 *.pt
 *.pth
+SAM-6D/Data/Output/*
