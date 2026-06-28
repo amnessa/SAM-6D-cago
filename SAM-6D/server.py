@@ -12,7 +12,7 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "Data", "Output")
 
 # CAD model is fixed per deployed object (client only sends rgb/depth/camera).
 # Override with the CAD_PATH env var if needed.
-CAD_PATH = os.environ.get("CAD_PATH", os.path.join(DATA_DIR, "powerdrill.ply"))
+CAD_PATH = os.environ.get("CAD_PATH", os.path.join(DATA_DIR, "plate.ply"))
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
